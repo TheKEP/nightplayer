@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Botón de perfil que se inserta en la barra de controles de Media3. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="match_parent"
+    android:background="@drawable/control_button_background"
+    android:drawablePadding="8dp"
+    android:focusable="true"
+    android:gravity="center_vertical"
+    android:paddingHorizontal="16dp"
+    android:textColor="@android:color/white"
+    android:textSize="16sp"
+    android:drawableStart="@drawable/ic_night_mode" />

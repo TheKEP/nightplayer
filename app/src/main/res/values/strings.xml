@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Textos por defecto (inglés). La versión en español está en values-es/. -->
+<resources>
+    <string name="app_name">NightPlayer</string>
+    <string name="launcher_hint">NightPlayer is installed.\n\nTo use it, in Stremio go to Settings → Playback → Default player → External and pick NightPlayer when you play a movie.\n\nWhile watching, the Menu key on the remote changes the audio profile.</string>
+
+    <string name="profile_off">Off</string>
+    <string name="profile_soft">Soft</string>
+    <string name="profile_night">Night</string>
+    <string name="profile_button">%1$s</string>
+    <string name="profile_toast">Audio profile: %1$s</string>
+
+    <string name="playback_error">This video can\'t be played (%1$s).\n%2$s\n\nPress Back to return.</string>
+</resources>

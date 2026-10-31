@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NightPlayer</string>
+    <string name="launcher_hint">NightPlayer está instalado.\n\nPara usarlo, en Stremio ve a Ajustes → Reproducción → Reproductor por defecto → Reproductor externo y elige NightPlayer al reproducir una película.\n\nDurante la reproducción, la tecla Menú del mando cambia el perfil de audio.</string>
+
+    <string name="profile_off">Desactivado</string>
+    <string name="profile_soft">Suave</string>
+    <string name="profile_night">Noche</string>
+    <string name="profile_button">%1$s</string>
+    <string name="profile_toast">Perfil de audio: %1$s</string>
+
+    <string name="playback_error">No se puede reproducir este vídeo (%1$s).\n%2$s\n\nPulsa Atrás para volver.</string>
+</resources>

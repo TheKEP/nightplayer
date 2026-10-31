@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black"
+    android:keepScreenOn="true">
+
+    <!-- Vídeo + controles de Media3 (play/pausa, barra de progreso, subtítulos, ajustes). -->
+    <androidx.media3.ui.PlayerView
+        android:id="@+id/player_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:focusable="true"
+        app:show_buffering="when_playing"
+        app:show_shuffle_button="false" />
+
+    <!-- Título de la peli, visible a la vez que los controles. -->
+    <TextView
+        android:id="@+id/title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:background="@drawable/title_scrim"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:paddingHorizontal="48dp"
+        android:paddingTop="27dp"
+        android:paddingBottom="36dp"
+        android:textColor="@android:color/white"
+        android:textSize="24sp"
+        android:visibility="gone" />
+
+    <!-- Recuadro de avance/retroceso: se coloca encima de la barra de tiempo desde código. -->
+    <LinearLayout
+        android:id="@+id/scrub_preview"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/toast_background"
+        android:gravity="center_horizontal"
+        android:minWidth="160dp"
+        android:orientation="vertical"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="12dp"
+        android:visibility="gone">
+
+        <!-- Fotograma del destino (se rellena desde ScrubController). -->
+        <ImageView
+            android:id="@+id/scrub_thumbnail"
+            android:layout_width="240dp"
+            android:layout_height="100dp"
+            android:layout_marginBottom="8dp"
+            android:background="#26FFFFFF"
+            android:contentDescription="@null"
+            android:scaleType="fitCenter"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/scrub_target"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFeatureSettings="tnum"
+            android:textColor="@android:color/white"
+            android:textSize="28sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/scrub_delta"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFeatureSettings="tnum"
+            android:textColor="#F2C14E"
+            android:textSize="18sp" />
+    </LinearLayout>
+
+    <!-- Aviso breve al cambiar de perfil. -->
+    <TextView
+        android:id="@+id/profile_toast"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="27dp"
+        android:layout_marginEnd="48dp"
+        android:background="@drawable/toast_background"
+        android:paddingHorizontal="24dp"
+        android:paddingVertical="12dp"
+        android:textColor="@android:color/white"
+        android:textSize="20sp"
+        android:visibility="gone" />
+
+    <!-- Ayuda al abrir desde el inicio, o mensaje de error. -->
+    <TextView
+        android:id="@+id/message"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:layout_marginHorizontal="96dp"
+        android:gravity="center"
+        android:lineSpacingMultiplier="1.2"
+        android:textColor="#E6FFFFFF"
+        android:textSize="22sp"
+        android:visibility="gone" />
+</FrameLayout>
