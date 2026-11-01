@@ -10,8 +10,8 @@ Movie soundtracks are mixed for cinemas. On TV speakers that means whispering di
 
 - **Night mode audio** with three profiles you can switch while watching, from the remote:
   - **Off**: plain stereo downmix, no processing.
-  - **Soft**: gentle leveling, +3 dB dialogue.
-  - **Night**: strong leveling, +6 dB dialogue. In tests, an "explosion" ends up ~5 dB above the dialogue instead of ~30 dB.
+  - **Soft**: gentle leveling, +3 dB dialogue, slightly wider stereo.
+  - **Night**: strong leveling, +6 dB dialogue, wider stereo. In tests, an "explosion" ends up ~5 dB above the dialogue instead of ~30 dB.
 - **Dialogue boost for 5.1/7.1:** downmixes surround to stereo while raising the center channel, which is where the voices live.
 - **Plays the formats your TV can't:** AC3, E-AC3 (Dolby Digital Plus), DTS and more are decoded in software with FFmpeg, so the audio can be processed (and actually plays on TVs without those decoders).
 - **Resume with Stremio:** starts where Stremio tells it to, and hands the position back when you exit, so Stremio remembers where you left off.
@@ -55,7 +55,8 @@ ExoPlayer (AndroidX Media3) with a custom audio chain running on PCM before it r
 
 1. **Dialog downmix:** `L = FL + c·FC + 0.5·SL`, `R = FR + c·FC + 0.5·SR`, where the center gain `c` depends on the profile. LFE is dropped.
 2. **Compressor:** feed-forward, stereo-linked, ~10 ms RMS detector, 6 dB soft knee, attack/release and makeup gain.
-3. **Limiter:** 5 ms lookahead, −1 dBFS ceiling, 80 ms release.
+3. **Stereo width:** mid/side, `L' = M + w·S`, `R' = M − w·S` (w = 1 / 1.2 / 1.4 for Off / Soft / Night). The boosted center plays equally in both speakers and makes the image feel narrower; widening the side signal brings ambience and panned effects back out without touching the dialogue.
+4. **Limiter:** 5 ms lookahead, −1 dBFS ceiling, 80 ms release.
 
 Profile changes are smoothed over ~50 ms, so switching never clicks or interrupts playback. The DSP has JVM unit tests with synthetic signals.
 

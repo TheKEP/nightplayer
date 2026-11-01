@@ -7,7 +7,7 @@ import org.junit.Test
 class AudioChainTest {
 
     private fun chain(profile: AudioProfile) = LiveAudioProfile(profile).let {
-        listOf(DialogDownmixProcessor(it), CompressorProcessor(it), LimiterProcessor(it))
+        listOf(DialogDownmixProcessor(it), CompressorProcessor(it), StereoWidthProcessor(it), LimiterProcessor(it))
     }
 
     /** 5.1 con un seno en los canales indicados (máscara de 6 posiciones). */
@@ -48,6 +48,23 @@ class AudioChainTest {
         for (profile in listOf(AudioProfile.SOFT, AudioProfile.NIGHT)) {
             val out = Dsp.process(chain(profile), scene().first, 6, endOfStream = true)
             assertTrue("$profile: ${Dsp.toDb(Dsp.peak(out))} dBFS", Dsp.peak(out) <= dbToLinear(-1f) + 1e-6f)
+        }
+    }
+
+    @Test
+    fun `en Noche el diálogo sigue centrado y el lado izquierdo no se cuela en el derecho`() {
+        val dialog = surround(-20.0, 1.0, dialogOnly)
+        val leftFront = surround(-20.0, 1.0, booleanArrayOf(true, false, false, false, false, false))
+        for (input in listOf(dialog, leftFront)) {
+            val out = Dsp.process(chain(AudioProfile.NIGHT), input, 6, endOfStream = true)
+            val left = FloatArray(out.size / 2) { out[2 * it] }
+            val right = FloatArray(out.size / 2) { out[2 * it + 1] }
+            if (input === dialog) {
+                assertTrue("diálogo descentrado", left.indices.all { kotlin.math.abs(left[it] - right[it]) < 1e-6f })
+            } else {
+                // Al ensanchar, lo que solo está a un lado sale en fase opuesta y más débil en el otro.
+                assertTrue(Dsp.peak(right) < Dsp.peak(left) * 0.25f)
+            }
         }
     }
 }

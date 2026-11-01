@@ -15,6 +15,7 @@ import com.otoniel.nightplayer.audio.CompressorProcessor
 import com.otoniel.nightplayer.audio.DialogDownmixProcessor
 import com.otoniel.nightplayer.audio.LimiterProcessor
 import com.otoniel.nightplayer.audio.LiveAudioProfile
+import com.otoniel.nightplayer.audio.StereoWidthProcessor
 
 /**
  * Monta los "renderers" de ExoPlayer: los componentes que decodifican y entregan vídeo y
@@ -25,7 +26,7 @@ import com.otoniel.nightplayer.audio.LiveAudioProfile
  *    soporta un formato, se usa el decodificador del sistema (MediaCodec) como respaldo.
  *  - Un DefaultAudioSink que solo acepta PCM (sin passthrough de Dolby/DTS a la tele ni a
  *    una barra de sonido) y pasa todo por nuestra cadena:
- *    DialogDownmixProcessor → CompressorProcessor → LimiterProcessor.
+ *    DialogDownmixProcessor → CompressorProcessor → StereoWidthProcessor → LimiterProcessor.
  */
 @UnstableApi
 class NightModeRenderersFactory(
@@ -47,6 +48,7 @@ class NightModeRenderersFactory(
                 arrayOf(
                     DialogDownmixProcessor(liveProfile),
                     CompressorProcessor(liveProfile),
+                    StereoWidthProcessor(liveProfile),
                     LimiterProcessor(liveProfile),
                 ),
             )

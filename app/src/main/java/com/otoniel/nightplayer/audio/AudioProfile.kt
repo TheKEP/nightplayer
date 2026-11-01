@@ -7,7 +7,7 @@ import com.otoniel.nightplayer.R
  * Perfiles de nivelación de volumen (valores de partida del plan, a ajustar a oído).
  *
  * "Desactivado" no apaga los procesadores: es un perfil con valores neutros
- * (ganancias a 0 dB y ratio 1:1). Así cambiar de perfil nunca reconfigura el reproductor
+ * (ganancias a 0 dB, ratio 1:1 y anchura 1). Así cambiar de perfil nunca reconfigura el reproductor
  * ni corta el audio.
  */
 enum class AudioProfile(
@@ -23,18 +23,23 @@ enum class AudioProfile(
     /** Ganancia de compensación tras comprimir, para que los diálogos suban. */
     val makeupDb: Float,
     val limiterEnabled: Boolean,
+    /** Anchura estéreo (mid/side): 1 = sin cambios; >1 devuelve a los lados lo que tapa el central. */
+    val stereoWidth: Float,
 ) {
     OFF(
         R.string.profile_off, dialogGainDb = 0f, thresholdDb = 0f, ratio = 1f,
         attackMs = 10f, releaseMs = 200f, makeupDb = 0f, limiterEnabled = false,
+        stereoWidth = 1f,
     ),
     SOFT(
         R.string.profile_soft, dialogGainDb = 3f, thresholdDb = -24f, ratio = 3f,
         attackMs = 10f, releaseMs = 200f, makeupDb = 4f, limiterEnabled = true,
+        stereoWidth = 1.2f,
     ),
     NIGHT(
         R.string.profile_night, dialogGainDb = 6f, thresholdDb = -30f, ratio = 6f,
         attackMs = 5f, releaseMs = 300f, makeupDb = 8f, limiterEnabled = true,
+        stereoWidth = 1.4f,
     );
 
     /** Siguiente perfil en el ciclo Desactivado → Suave → Noche → Desactivado. */
