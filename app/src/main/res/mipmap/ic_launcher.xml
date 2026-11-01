@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icono para Android < 8.0 (p. ej. Fire TV con Fire OS 6 / API 25),
+     que no entiende adaptive-icon: mismo fondo y primer plano apilados. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/brand_background" />
+    <item android:drawable="@drawable/ic_launcher_foreground" />
+</layer-list>

@@ -23,10 +23,10 @@ android {
 
     defaultConfig {
         applicationId = "com.otoniel.nightplayer"
-        minSdk = 26
+        minSdk = 24 // Android 7.0: incluye Fire OS 6 (API 25). DataStore no permite bajar más.
         targetSdk = 37
-        versionCode = 2
-        versionName = "1.0.0"
+        versionCode = 3
+        versionName = "1.0.1"
     }
 
     signingConfigs {

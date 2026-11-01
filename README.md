@@ -28,7 +28,7 @@ Movie soundtracks are mixed for cinemas. On TV speakers that means whispering di
 3. In Stremio: **Settings → Playback → Default player → External**.
 4. Play something and pick **NightPlayer** in the Android chooser. Choose **Always** if you don't want to be asked again.
 
-Requires Android 8.0+ (tested on a Xiaomi TV running Android 10).
+Requires Android 7.0+, which includes Fire TV devices on Fire OS 6 (tested on a Xiaomi TV running Android 10).
 
 ## Remote controls
 
