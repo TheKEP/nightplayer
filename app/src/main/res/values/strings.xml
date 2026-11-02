@@ -10,5 +10,10 @@
     <string name="profile_button">%1$s</string>
     <string name="profile_toast">Audio profile: %1$s</string>
 
+    <string name="audio_sync_button">Sync %1$s</string>
+    <string name="audio_sync_panel">Audio sync: %1$s\n%2$s\n← → adjust (→ if the sound is late) · OK to finish</string>
+    <string name="audio_sync_toast">Audio sync: %1$s (%2$s)</string>
+    <string name="audio_output_unknown">Current audio output</string>
+
     <string name="playback_error">This video can\'t be played (%1$s).\n%2$s\n\nPress Back to return.</string>
 </resources>

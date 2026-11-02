@@ -88,6 +88,23 @@
         android:textSize="20sp"
         android:visibility="gone" />
 
+    <!-- Ajuste de sincronía: visible mientras se ajusta con ←/→ (sin controles, para ver los labios). -->
+    <TextView
+        android:id="@+id/sync_panel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="27dp"
+        android:background="@drawable/toast_background"
+        android:fontFeatureSettings="tnum"
+        android:gravity="center"
+        android:lineSpacingMultiplier="1.2"
+        android:paddingHorizontal="24dp"
+        android:paddingVertical="12dp"
+        android:textColor="@android:color/white"
+        android:textSize="20sp"
+        android:visibility="gone" />
+
     <!-- Ayuda al abrir desde el inicio, o mensaje de error. -->
     <TextView
         android:id="@+id/message"

@@ -27,11 +27,13 @@ import com.otoniel.nightplayer.audio.StereoWidthProcessor
  *  - Un DefaultAudioSink que solo acepta PCM (sin passthrough de Dolby/DTS a la tele ni a
  *    una barra de sonido) y pasa todo por nuestra cadena:
  *    DialogDownmixProcessor → CompressorProcessor → StereoWidthProcessor → LimiterProcessor.
+ *  - Envuelto en un AudioSyncSink para el ajuste de sincronía audio/imagen.
  */
 @UnstableApi
 class NightModeRenderersFactory(
     context: Context,
     private val liveProfile: LiveAudioProfile,
+    private val liveSync: LiveAudioSync,
 ) : DefaultRenderersFactory(context) {
 
     @Suppress("DEPRECATION") // setAudioCapabilities: sigue siendo la forma directa de vetar el passthrough
@@ -39,7 +41,7 @@ class NightModeRenderersFactory(
         context: Context,
         enableFloatOutput: Boolean,
         enableAudioTrackPlaybackParams: Boolean,
-    ): AudioSink =
+    ): AudioSink = AudioSyncSink(
         DefaultAudioSink.Builder(context)
             // Capacidades "por defecto" = solo PCM estéreo. Así ExoPlayer nunca intenta
             // enviar el bitstream AC3/DTS sin decodificar, que no podríamos tocar.
@@ -54,7 +56,9 @@ class NightModeRenderersFactory(
             )
             .setEnableFloatOutput(enableFloatOutput)
             .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-            .build()
+            .build(),
+        liveSync,
+    )
 
     override fun buildAudioRenderers(
         context: Context,

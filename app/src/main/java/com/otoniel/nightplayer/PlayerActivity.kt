@@ -2,6 +2,9 @@ package com.otoniel.nightplayer
 
 import android.content.Intent
 import android.graphics.Color
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
@@ -37,8 +40,12 @@ import androidx.media3.ui.DefaultTimeBar
 import androidx.media3.ui.PlayerView
 import com.otoniel.nightplayer.audio.AudioProfile
 import com.otoniel.nightplayer.audio.LiveAudioProfile
+import com.otoniel.nightplayer.player.AudioOutput
+import com.otoniel.nightplayer.player.AudioOutputs
+import com.otoniel.nightplayer.player.LiveAudioSync
 import com.otoniel.nightplayer.player.NightModeRenderersFactory
 import com.otoniel.nightplayer.player.ScrubController
+import com.otoniel.nightplayer.settings.AudioSyncStore
 import com.otoniel.nightplayer.settings.ProfileStore
 import com.otoniel.nightplayer.settings.TrackPreferences
 import com.otoniel.nightplayer.settings.TrackPreferencesStore
@@ -64,6 +71,8 @@ class PlayerActivity : ComponentActivity() {
     private lateinit var titleView: TextView
     private lateinit var profileToast: TextView
     private var profileButton: TextView? = null
+    private var syncButton: TextView? = null
+    private lateinit var syncPanel: TextView
     private lateinit var scrubber: ScrubController
 
     private lateinit var profileStore: ProfileStore
@@ -74,6 +83,12 @@ class PlayerActivity : ComponentActivity() {
     private var pendingAudioChange = false
     private var pendingTextChange = false
     private val liveProfile = LiveAudioProfile()
+
+    private lateinit var audioManager: AudioManager
+    private lateinit var audioSyncStore: AudioSyncStore
+    private val liveSync = LiveAudioSync()
+    private var audioOutput: AudioOutput? = null
+    private var adjustingSync = false
 
     private var request: PlaybackRequest? = null
     private var player: ExoPlayer? = null
@@ -88,6 +103,14 @@ class PlayerActivity : ComponentActivity() {
     private var consumedKeyCode = KeyEvent.KEYCODE_UNKNOWN
 
     private val hideProfileToast = Runnable { profileToast.visibility = View.GONE }
+    private val closeSyncAdjustRunnable = Runnable { closeSyncAdjust() }
+    private val refreshAudioOutputRunnable = Runnable { refreshAudioOutput() }
+
+    /** Al conectar o desconectar auriculares, la salida cambia y se aplica su sincronía. */
+    private val audioDeviceCallback = object : AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) = scheduleAudioOutputRefresh()
+        override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) = scheduleAudioOutputRefresh()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -96,15 +119,21 @@ class PlayerActivity : ComponentActivity() {
         messageView = findViewById(R.id.message)
         titleView = findViewById(R.id.title)
         profileToast = findViewById(R.id.profile_toast)
+        syncPanel = findViewById(R.id.sync_panel)
 
         // Leer el perfil guardado bloqueando un instante: es un fichero diminuto y así el
         // audio empieza ya con el perfil correcto, sin un salto de volumen al arrancar.
         profileStore = ProfileStore(this)
         trackPreferencesStore = TrackPreferencesStore(this)
+        audioSyncStore = AudioSyncStore(this)
+        audioManager = getSystemService(AudioManager::class.java)
+        audioOutput = AudioOutputs.current(audioManager)
         runBlocking {
             liveProfile.current = profileStore.load()
             trackPreferences = trackPreferencesStore.load()
+            liveSync.offsetMs = audioOutput?.let { audioSyncStore.load(it.key) } ?: 0
         }
+        Log.i(TAG, "Salida de audio: ${audioOutput?.key} sincronía=${liveSync.offsetMs} ms")
 
         IntentParser.logIntent(intent)
         val parsed = IntentParser.parse(intent)
@@ -125,13 +154,20 @@ class PlayerActivity : ComponentActivity() {
         // los controles estén a la vista). Va aquí y no en dispatchKeyEvent porque en Android 13+
         // el sistema puede entregar Atrás directamente a este callback ("atrás predictivo").
         onBackPressedDispatcher.addCallback(this) {
-            if (scrubber.isScrubbing) scrubber.cancel() else finishWithResult(END_BY_USER)
+            when {
+                adjustingSync -> closeSyncAdjust()
+                scrubber.isScrubbing -> scrubber.cancel()
+                else -> finishWithResult(END_BY_USER)
+            }
         }
     }
 
     override fun onStart() {
         super.onStart()
-        if (request != null) initializePlayer()
+        if (request != null) {
+            initializePlayer()
+            audioManager.registerAudioDeviceCallback(audioDeviceCallback, null)
+        }
     }
 
     override fun onPause() {
@@ -143,6 +179,11 @@ class PlayerActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
+        if (request != null) {
+            closeSyncAdjust()
+            audioManager.unregisterAudioDeviceCallback(audioDeviceCallback)
+            syncPanel.removeCallbacks(refreshAudioOutputRunnable)
+        }
         releasePlayer()
     }
 
@@ -159,7 +200,7 @@ class PlayerActivity : ComponentActivity() {
             .setAllowCrossProtocolRedirects(true)
         val dataSourceFactory = DefaultDataSource.Factory(this, httpFactory)
 
-        val newPlayer = ExoPlayer.Builder(this, NightModeRenderersFactory(this, liveProfile))
+        val newPlayer = ExoPlayer.Builder(this, NightModeRenderersFactory(this, liveProfile, liveSync))
             .setMediaSourceFactory(DefaultMediaSourceFactory(dataSourceFactory))
             .setAudioAttributes(
                 AudioAttributes.Builder()
@@ -393,8 +434,15 @@ class PlayerActivity : ComponentActivity() {
             button.setOnClickListener { setProfile(liveProfile.current.next()) }
             basicControls.addView(button, 0)
             profileButton = button
+
+            val sync = LayoutInflater.from(this)
+                .inflate(R.layout.sync_button, basicControls, false) as TextView
+            sync.setOnClickListener { openSyncAdjust() }
+            basicControls.addView(sync, 1)
+            syncButton = sync
         }
         updateProfileButton()
+        updateSyncButton()
 
         val timeBar = playerView.findViewById<View>(androidx.media3.ui.R.id.exo_progress)
         // Por si la barra recibe el foco y una tecla llega a ella: pasos de 10 s, no de 1/20 de la peli.
@@ -435,6 +483,7 @@ class PlayerActivity : ComponentActivity() {
     /**
      * Atajos del mando. Se interceptan aquí, antes de que la vista de controles los vea:
      *  - Menú: cambia de perfil de audio.
+     *  - Ajustando la sincronía: ←/→ cambian el desfase y OK termina.
      *  - ←/→: avance progresivo con recuadro de destino (ver ScrubController).
      *  - OK: confirma el avance o pausa/reanuda.
      * Con el foco en la fila de botones de abajo (↓ para llegar), ←/→/OK funcionan como
@@ -471,6 +520,16 @@ class PlayerActivity : ComponentActivity() {
             if (firstPress) setProfile(liveProfile.current.next())
             return true
         }
+        if (adjustingSync) {
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT ->
+                    stepSync(forward = event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> if (firstPress) closeSyncAdjust()
+                KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> Unit // sin controles encima del vídeo
+                else -> return false
+            }
+            return true
+        }
         if (playerView.isControllerFullyVisible && focusInButtonRow()) return false
         when (event.keyCode) {
             KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
@@ -496,11 +555,15 @@ class PlayerActivity : ComponentActivity() {
         liveProfile.current = profile // el hilo de audio lo aplica en el siguiente buffer
         Log.i(TAG, "Perfil de audio: ${profile.name}")
         updateProfileButton()
-        profileToast.text = getString(R.string.profile_toast, getString(profile.labelRes))
+        showToast(getString(R.string.profile_toast, getString(profile.labelRes)))
+        lifecycleScope.launch { profileStore.save(profile) }
+    }
+
+    private fun showToast(text: String) {
+        profileToast.text = text
         profileToast.visibility = View.VISIBLE
         profileToast.removeCallbacks(hideProfileToast)
         profileToast.postDelayed(hideProfileToast, TOAST_DURATION_MS)
-        lifecycleScope.launch { profileStore.save(profile) }
     }
 
     private fun updateProfileButton() {
@@ -508,6 +571,74 @@ class PlayerActivity : ComponentActivity() {
         profileButton?.text = getString(R.string.profile_button, label)
         profileButton?.contentDescription = getString(R.string.profile_toast, label)
     }
+
+    // ---------------------------------------------------------------- Sincronía audio/imagen
+
+    /** Modo de ajuste: se ocultan los controles para ver bien los labios mientras se ajusta. */
+    private fun openSyncAdjust() {
+        adjustingSync = true
+        playerView.hideController()
+        profileToast.visibility = View.GONE
+        updateSyncPanel()
+        syncPanel.visibility = View.VISIBLE
+        syncPanel.removeCallbacks(closeSyncAdjustRunnable)
+        syncPanel.postDelayed(closeSyncAdjustRunnable, SYNC_ADJUST_TIMEOUT_MS)
+    }
+
+    private fun stepSync(forward: Boolean) {
+        val step = if (forward) SYNC_STEP_MS else -SYNC_STEP_MS
+        liveSync.offsetMs = (liveSync.offsetMs + step).coerceIn(SYNC_MIN_MS, SYNC_MAX_MS)
+        updateSyncButton()
+        updateSyncPanel()
+        syncPanel.removeCallbacks(closeSyncAdjustRunnable)
+        syncPanel.postDelayed(closeSyncAdjustRunnable, SYNC_ADJUST_TIMEOUT_MS)
+    }
+
+    /** Sale del modo de ajuste y guarda el desfase para la salida de audio actual. */
+    private fun closeSyncAdjust() {
+        if (!adjustingSync) return
+        adjustingSync = false
+        syncPanel.removeCallbacks(closeSyncAdjustRunnable)
+        syncPanel.visibility = View.GONE
+        val output = audioOutput ?: return
+        val offset = liveSync.offsetMs
+        Log.i(TAG, "Sincronía de audio para ${output.key}: $offset ms")
+        lifecycleScope.launch { audioSyncStore.save(output.key, offset) }
+    }
+
+    /** Los avisos de dispositivo llegan antes de que Android cambie la ruta: se espera un poco. */
+    private fun scheduleAudioOutputRefresh() {
+        syncPanel.removeCallbacks(refreshAudioOutputRunnable)
+        syncPanel.postDelayed(refreshAudioOutputRunnable, AUDIO_OUTPUT_REFRESH_DELAY_MS)
+    }
+
+    private fun refreshAudioOutput() {
+        val output = AudioOutputs.current(audioManager)
+        if (output?.key == audioOutput?.key) return
+        closeSyncAdjust() // guarda lo ajustado para la salida anterior
+        audioOutput = output
+        lifecycleScope.launch {
+            val offset = output?.let { audioSyncStore.load(it.key) } ?: 0
+            if (audioOutput?.key != output?.key) return@launch // ha vuelto a cambiar mientras tanto
+            Log.i(TAG, "Salida de audio: ${output?.key} sincronía=$offset ms")
+            liveSync.offsetMs = offset
+            updateSyncButton()
+            if (offset != 0) showToast(getString(R.string.audio_sync_toast, formatSync(offset), outputName()))
+        }
+    }
+
+    private fun updateSyncButton() {
+        syncButton?.text = getString(R.string.audio_sync_button, formatSync(liveSync.offsetMs))
+    }
+
+    private fun updateSyncPanel() {
+        syncPanel.text = getString(R.string.audio_sync_panel, formatSync(liveSync.offsetMs), outputName())
+    }
+
+    private fun outputName(): String = audioOutput?.name ?: getString(R.string.audio_output_unknown)
+
+    private fun formatSync(offsetMs: Int): String =
+        if (offsetMs == 0) "0 ms" else String.format(Locale.ROOT, "%+d ms", offsetMs)
 
     // ---------------------------------------------------------------- Vuelta a Stremio
 
@@ -555,6 +686,16 @@ class PlayerActivity : ComponentActivity() {
         const val SEEK_INCREMENT_MS = 10_000L
         const val CONTROLLER_TIMEOUT_MS = 5_000
         const val TOAST_DURATION_MS = 2_000L
+
+        // Pasos de 25 ms: el desfase se empieza a notar hacia los 45 ms (sonido adelantado) y
+        // los 125 ms (retrasado), así que 50 ms se quedan cortos para afinar.
+        const val SYNC_STEP_MS = 25
+        // El Bluetooth puede añadir 100–300 ms (más con algunos códecs). En negativo se limita:
+        // adelantar mucho el vídeo obliga al decodificador a ir por delante y descarta fotogramas.
+        const val SYNC_MIN_MS = -300
+        const val SYNC_MAX_MS = 1_000
+        const val SYNC_ADJUST_TIMEOUT_MS = 8_000L
+        const val AUDIO_OUTPUT_REFRESH_DELAY_MS = 750L
 
         const val RESULT_ACTION = "com.mxtech.intent.result.VIEW"
         const val EXTRA_POSITION = "position"

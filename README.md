@@ -37,8 +37,10 @@ Requires Android 7.0+, which includes Fire TV devices on Fire OS 6 (tested on a 
 | **← / →** | Seek 10 s per press; hold to accelerate (10 s → 30 s → 60 s → 2 min). The current scene freezes in the background while a thumbnail of the target frame, the time and the jump size show above the timeline. Release (~1 s) or press OK to jump. |
 | **OK** | Confirm the seek, or play / pause |
 | **Menu** | Cycle audio profile (Off → Soft → Night) |
-| **↑ / ↓** | Show controls; ↓ moves to the button row (profile, subtitles, settings), where ←/→/OK move focus and press |
+| **↑ / ↓** | Show controls; ↓ moves to the button row (profile, sync, subtitles, settings), where ←/→/OK move focus and press |
 | **Back** | Cancel a seek in progress; otherwise return to Stremio |
+
+**Audio sync** (button next to the profile): fixes the delay of Bluetooth headphones and speakers. Press it, then ←/→ shift the picture in 25 ms steps (→ if the sound is late, from −300 to +1000 ms) and OK to finish. The value is remembered per audio output, so your headphones keep theirs and the TV speakers stay at 0.
 
 The audio track is in the ⚙️ settings button. Embedded subtitles are under **CC**.
 
