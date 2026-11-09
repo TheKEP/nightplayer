@@ -2,17 +2,20 @@ package com.otoniel.nightplayer
 
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Typeface
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
+import android.view.Gravity
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.activity.ComponentActivity
@@ -28,6 +31,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.common.TrackSelectionParameters.AudioOffloadPreferences
+import androidx.media3.common.text.Cue
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
@@ -36,8 +40,10 @@ import androidx.media3.exoplayer.DecoderReuseEvaluation
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.DefaultTimeBar
 import androidx.media3.ui.PlayerView
+import androidx.media3.ui.SubtitleView
 import com.otoniel.nightplayer.audio.AudioProfile
 import com.otoniel.nightplayer.audio.LiveAudioProfile
 import com.otoniel.nightplayer.player.AudioOutput
@@ -46,6 +52,8 @@ import com.otoniel.nightplayer.player.LiveAudioSync
 import com.otoniel.nightplayer.player.NightModeRenderersFactory
 import com.otoniel.nightplayer.player.ScrubController
 import com.otoniel.nightplayer.settings.AudioSyncStore
+import com.otoniel.nightplayer.settings.CaptionStyle
+import com.otoniel.nightplayer.settings.CaptionStyleStore
 import com.otoniel.nightplayer.settings.ProfileStore
 import com.otoniel.nightplayer.settings.TrackPreferences
 import com.otoniel.nightplayer.settings.TrackPreferencesStore
@@ -74,6 +82,13 @@ class PlayerActivity : ComponentActivity() {
     private var syncButton: TextView? = null
     private lateinit var syncPanel: TextView
     private lateinit var scrubber: ScrubController
+
+    private lateinit var captionStyleStore: CaptionStyleStore
+    private var captionStyle = CaptionStyle()
+    private lateinit var captionPanel: TextView
+    private var captionButton: TextView? = null
+    private var adjustingCaptions = false
+    private var captionRow = 0
 
     private lateinit var profileStore: ProfileStore
     private lateinit var trackPreferencesStore: TrackPreferencesStore
@@ -104,6 +119,7 @@ class PlayerActivity : ComponentActivity() {
 
     private val hideProfileToast = Runnable { profileToast.visibility = View.GONE }
     private val closeSyncAdjustRunnable = Runnable { closeSyncAdjust() }
+    private val closeCaptionAdjustRunnable = Runnable { closeCaptionAdjust() }
     private val refreshAudioOutputRunnable = Runnable { refreshAudioOutput() }
 
     /** Al conectar o desconectar auriculares, la salida cambia y se aplica su sincronía. */
@@ -125,6 +141,8 @@ class PlayerActivity : ComponentActivity() {
         // audio empieza ya con el perfil correcto, sin un salto de volumen al arrancar.
         profileStore = ProfileStore(this)
         trackPreferencesStore = TrackPreferencesStore(this)
+        captionStyleStore = CaptionStyleStore(this)
+        captionStyle = captionStyleStore.load()
         audioSyncStore = AudioSyncStore(this)
         audioManager = getSystemService(AudioManager::class.java)
         audioOutput = AudioOutputs.current(audioManager)
@@ -156,6 +174,7 @@ class PlayerActivity : ComponentActivity() {
         onBackPressedDispatcher.addCallback(this) {
             when {
                 adjustingSync -> closeSyncAdjust()
+                adjustingCaptions -> closeCaptionAdjust()
                 scrubber.isScrubbing -> scrubber.cancel()
                 else -> finishWithResult(END_BY_USER)
             }
@@ -181,6 +200,7 @@ class PlayerActivity : ComponentActivity() {
         super.onStop()
         if (request != null) {
             closeSyncAdjust()
+            closeCaptionAdjust()
             audioManager.unregisterAudioDeviceCallback(audioDeviceCallback)
             syncPanel.removeCallbacks(refreshAudioOutputRunnable)
         }
@@ -440,9 +460,38 @@ class PlayerActivity : ComponentActivity() {
             sync.setOnClickListener { openSyncAdjust() }
             basicControls.addView(sync, 1)
             syncButton = sync
+
+            // Botón de estilo de subtítulos. Reutiliza el layout del botón de sincronía; si
+            // quieres otro icono, crea un layout propio (p. ej. caption_style_button).
+            val caption = LayoutInflater.from(this)
+                .inflate(R.layout.sync_button, basicControls, false) as TextView
+            caption.text = "Aa"
+            caption.contentDescription = "Caption style"
+            caption.setOnClickListener { openCaptionAdjust() }
+            basicControls.addView(caption, 2)
+            captionButton = caption
         }
         updateProfileButton()
         updateSyncButton()
+
+        // Panel de estilo: arriba, para no tapar los subtítulos (que salen abajo).
+        captionPanel = TextView(this).apply {
+            setTextColor(Color.WHITE)
+            textSize = 20f
+            setPadding(dp(28), dp(16), dp(28), dp(16))
+            setBackgroundColor(0xCC000000.toInt())
+            isFocusable = false
+            visibility = View.GONE
+        }
+        playerView.overlayFrameLayout?.addView(
+            captionPanel,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP or Gravity.CENTER_HORIZONTAL,
+            ).apply { topMargin = dp(32) },
+        )
+        applyCaptionStyle()
 
         val timeBar = playerView.findViewById<View>(androidx.media3.ui.R.id.exo_progress)
         // Por si la barra recibe el foco y una tecla llega a ella: pasos de 10 s, no de 1/20 de la peli.
@@ -518,6 +567,17 @@ class PlayerActivity : ComponentActivity() {
         val firstPress = event.repeatCount == 0
         if (event.keyCode == KeyEvent.KEYCODE_MENU) {
             if (firstPress) setProfile(liveProfile.current.next())
+            return true
+        }
+        if (adjustingCaptions) {
+            when (event.keyCode) {
+                KeyEvent.KEYCODE_DPAD_UP -> if (firstPress) moveCaptionRow(-1)
+                KeyEvent.KEYCODE_DPAD_DOWN -> if (firstPress) moveCaptionRow(1)
+                KeyEvent.KEYCODE_DPAD_LEFT -> if (firstPress) stepCaption(-1)
+                KeyEvent.KEYCODE_DPAD_RIGHT -> if (firstPress) stepCaption(1)
+                KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> if (firstPress) closeCaptionAdjust()
+                else -> return false
+            }
             return true
         }
         if (adjustingSync) {
@@ -640,6 +700,87 @@ class PlayerActivity : ComponentActivity() {
     private fun formatSync(offsetMs: Int): String =
         if (offsetMs == 0) "0 ms" else String.format(Locale.ROOT, "%+d ms", offsetMs)
 
+    // ---------------------------------------------------------------- Estilo de subtítulos
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    /** Aplica el estilo guardado a la vista de subtítulos de Media3. */
+    private fun applyCaptionStyle() {
+        val view = playerView.subtitleView ?: return
+        val s = captionStyle
+        // Con false, nuestro estilo manda también sobre subtítulos ASS/SSA/WebVTT con estilo propio.
+        view.setApplyEmbeddedStyles(s.embeddedStyles)
+        view.setApplyEmbeddedFontSizes(s.embeddedStyles)
+        view.setStyle(
+            CaptionStyleCompat(
+                s.textColor,
+                s.backgroundColor,
+                Color.TRANSPARENT,
+                s.edgeType,
+                Color.BLACK,
+                if (s.bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT,
+            ),
+        )
+        view.setFractionalTextSize(SubtitleView.DEFAULT_TEXT_SIZE_FRACTION * s.sizeFactor)
+    }
+
+    /** Modo de ajuste: ↑/↓ elige fila, ←/→ cambia el valor, OK o Atrás cierran. */
+    private fun openCaptionAdjust() {
+        adjustingCaptions = true
+        captionRow = 0
+        playerView.hideController()
+        profileToast.visibility = View.GONE
+        // Si ahora mismo no se ve ningún subtítulo, se enseña uno de muestra.
+        if (player?.currentCues?.cues.isNullOrEmpty()) {
+            playerView.subtitleView?.setCues(
+                listOf(Cue.Builder().setText("Sample caption: the quick brown fox").build()),
+            )
+        }
+        updateCaptionPanel()
+        captionPanel.visibility = View.VISIBLE
+        restartCaptionTimeout()
+    }
+
+    private fun moveCaptionRow(delta: Int) {
+        val rows = CaptionStyle.ROW_LABELS.size
+        captionRow = (captionRow + delta + rows) % rows
+        updateCaptionPanel()
+        restartCaptionTimeout()
+    }
+
+    private fun stepCaption(delta: Int) {
+        captionStyle = captionStyle.step(captionRow, delta)
+        applyCaptionStyle()
+        updateCaptionPanel()
+        restartCaptionTimeout()
+    }
+
+    private fun closeCaptionAdjust() {
+        if (!adjustingCaptions) return
+        adjustingCaptions = false
+        captionPanel.removeCallbacks(closeCaptionAdjustRunnable)
+        captionPanel.visibility = View.GONE
+        // Quita el subtítulo de muestra y devuelve el que toque.
+        playerView.subtitleView?.setCues(player?.currentCues?.cues)
+        captionStyleStore.save(captionStyle)
+    }
+
+    private fun restartCaptionTimeout() {
+        captionPanel.removeCallbacks(closeCaptionAdjustRunnable)
+        captionPanel.postDelayed(closeCaptionAdjustRunnable, CAPTION_ADJUST_TIMEOUT_MS)
+    }
+
+    private fun updateCaptionPanel() {
+        val text = StringBuilder("Caption style\n")
+        CaptionStyle.ROW_LABELS.forEachIndexed { row, label ->
+            val value = captionStyle.valueLabel(row)
+            text.append('\n')
+            if (row == captionRow) text.append("▶  $label:  ‹ $value ›") else text.append("    $label:  $value")
+        }
+        text.append("\n\n↑↓ choose   ←→ change   OK close")
+        captionPanel.text = text
+    }
+
     // ---------------------------------------------------------------- Vuelta a Stremio
 
     /**
@@ -695,6 +836,7 @@ class PlayerActivity : ComponentActivity() {
         const val SYNC_MIN_MS = -300
         const val SYNC_MAX_MS = 1_000
         const val SYNC_ADJUST_TIMEOUT_MS = 8_000L
+        const val CAPTION_ADJUST_TIMEOUT_MS = 15_000L
         const val AUDIO_OUTPUT_REFRESH_DELAY_MS = 750L
 
         const val RESULT_ACTION = "com.mxtech.intent.result.VIEW"
