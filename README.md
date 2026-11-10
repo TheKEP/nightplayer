@@ -38,7 +38,7 @@ Requires Android 7.0+, which includes Fire TV devices on Fire OS 6 (tested on a 
 | **OK** | Confirm the seek, or play / pause |
 | **Menu** | Cycle audio profile (Off → Soft → Night) |
 | **↑ / ↓** | Show controls; ↓ moves to the button row (profile, sync, subtitles, settings), where ←/→/OK move focus and press |
-| **Back** | Cancel a seek in progress; otherwise return to Stremio |
+| **Back**  | Cancel a seek or close the controls first; with nothing on screen, return to Stremio |
 
 **Audio sync** (button next to the profile): fixes the delay of Bluetooth headphones and speakers. Press it, then ←/→ shift the picture in 25 ms steps (→ if the sound is late, from −300 to +1000 ms) and OK to finish. The value is remembered per audio output, so your headphones keep theirs and the TV speakers stay at 0.
 
