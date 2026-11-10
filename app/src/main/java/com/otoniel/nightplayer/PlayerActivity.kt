@@ -105,6 +105,9 @@ class PlayerActivity : ComponentActivity() {
     private var audioOutput: AudioOutput? = null
     private var adjustingSync = false
 
+    /** true mientras los controles de Media3 están a la vista (los usa Atrás para ocultarlos primero). */
+    private var controllerShown = false
+
     private var request: PlaybackRequest? = null
     private var player: ExoPlayer? = null
 
@@ -168,14 +171,16 @@ class PlayerActivity : ComponentActivity() {
         titleView.text = parsed.title
         setUpControls()
 
-        // Atrás: cancela un avance en curso o, si no hay, vuelve a Stremio a la primera (aunque
-        // los controles estén a la vista). Va aquí y no en dispatchKeyEvent porque en Android 13+
-        // el sistema puede entregar Atrás directamente a este callback ("atrás predictivo").
+        // Atrás: cierra primero lo que haya encima del vídeo (ajustes, avance en curso, controles)
+        // y, solo cuando no quede nada a la vista, vuelve a Stremio. Va aquí y no en
+        // dispatchKeyEvent porque en Android 13+ el sistema puede entregar Atrás directamente a
+        // este callback ("atrás predictivo").
         onBackPressedDispatcher.addCallback(this) {
             when {
                 adjustingSync -> closeSyncAdjust()
                 adjustingCaptions -> closeCaptionAdjust()
                 scrubber.isScrubbing -> scrubber.cancel()
+                controllerShown -> playerView.hideController()
                 else -> finishWithResult(END_BY_USER)
             }
         }
@@ -442,7 +447,10 @@ class PlayerActivity : ComponentActivity() {
         playerView.setShowSubtitleButton(true)
         playerView.setControllerShowTimeoutMs(CONTROLLER_TIMEOUT_MS)
         playerView.setControllerVisibilityListener(
-            PlayerView.ControllerVisibilityListener { visibility -> titleView.visibility = visibility },
+            PlayerView.ControllerVisibilityListener { visibility ->
+                titleView.visibility = visibility
+                controllerShown = visibility == View.VISIBLE
+            },
         )
 
         // Botón de perfil dentro de la barra de controles de Media3, junto a subtítulos y ajustes
